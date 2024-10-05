@@ -1,83 +1,54 @@
-FROM ubuntu:18.04 AS builder
+FROM ubuntu:22.04
 
-# Install Rust and build dependencies
+# Install necessary dependencies
 RUN apt-get update && apt-get install -y \
     curl \
     build-essential \
     cmake \
-    git \
-    && curl https://sh.rustup.rs -sSf | sh -s -- -y \
-    && . $HOME/.cargo/env
+    supervisor \
+    python3-pip \
+    openjdk-11-jdk-headless \
+    && pip3 install supervisor-stdout
 
-# Set environment variables for Rust
-ENV PATH="/root/.cargo/bin:$PATH"
-
-# Set the working directory for the Rust project
-WORKDIR /usr/src/sol-rpc-ingestor
-RUN git clone https://github.com/dexterlaboss/ingestor-rpc.git . \
-    && cargo build --release
-
-# Clone and build the solana-lite-rpc tool
-WORKDIR /opt/solana-lite-rpc
-RUN git clone https://github.com/dexterlaboss/solana-lite-rpc.git . \
-    && cargo build --release
-
-
-FROM ubuntu:18.04
-
-ENV HBASE_VERSION 2.4.11
-RUN apt-get update
-RUN apt-get -y install supervisor python-pip openjdk-8-jdk-headless curl build-essential cmake git
-RUN pip install supervisor-stdout
-
-ENV JAVA_HOME="/usr/lib/jvm/java-8-openjdk-amd64"
+# Set up environment variables for Java
+ENV JAVA_HOME="/usr/lib/jvm/java-11-openjdk-amd64"
 ENV PATH="$JAVA_HOME/bin:$PATH"
 
+WORKDIR /usr/local/bin
+RUN curl -L -o ingestor-rpc https://github.com/dexterlaboss/ingestor-rpc/releases/download/v1.2.8/ingestor_rpc_v1.2.8_linux_amd64 \
+    && chmod +x ingestor-rpc
 
+RUN curl -L -o archival-rpc https://github.com/dexterlaboss/archival-rpc/releases/download/v1.4.4/archival_rpc_v1.4.4_linux_amd64 \
+    && chmod +x archival-rpc
+
+# Install HBase
+ENV HBASE_VERSION 2.4.11
 WORKDIR /opt
-
 RUN curl -O https://archive.apache.org/dist/hbase/2.4.11/hbase-2.4.11-bin.tar.gz \
     && tar xzf hbase-2.4.11-bin.tar.gz \
     && mv hbase-2.4.11 hbase \
     && rm hbase-2.4.11-bin.tar.gz
 
+# Set up Supervisor
+RUN mkdir -p /var/run/supervisor && chmod 755 /var/run/supervisor
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Set up HBase configuration
 COPY hbase-site.xml /opt/hbase-${HBASE_VERSION}/conf/hbase-site.xml
 RUN mkdir -p /data/hbase /data/zookeeper
 
+# Update PATH for HBase
 ENV PATH $PATH:/opt/hbase-${HBASE_VERSION}/bin
 
-COPY --from=builder /usr/src/sol-rpc-ingestor/target/release/sol-rpc-ingestor /usr/local/bin/sol-rpc-ingestor
-
-# Copy over the solana-lite-rpc binary from the builder stage
-COPY --from=builder /opt/solana-lite-rpc/target/release/solana-lite-rpc /usr/local/bin/solana-lite-rpc
-
+# Copy the create-hbase-tables script
 COPY create-hbase-tables.sh /usr/local/bin/create-hbase-tables.sh
 RUN chmod +x /usr/local/bin/create-hbase-tables.sh
 
-# Zookeeper port
-EXPOSE 2181 
+# Expose ports
+EXPOSE 2181 8080 8899 9090 16000 16010 16020 16030
 
-# REST port
-EXPOSE 8080
-
-EXPOSE 8899
-
-EXPOSE 9090
-
-# Master port
-EXPOSE 16000
-
-# Master info port
-EXPOSE 16010
-
-# Regionserver port
-EXPOSE 16020
-
-# Regionserver info port
-EXPOSE 16030
-
+# Create data directories
 VOLUME /data/hbase
 VOLUME /data/zookeeper
 
-CMD ["/usr/bin/supervisord"]
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
