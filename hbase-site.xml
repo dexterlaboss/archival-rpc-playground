@@ -19,4 +19,8 @@
     <name>hbase.unsafe.stream.capability.enforce</name>
     <value>false</value>
   </property>
+  <property>
+    <name>hbase.fs.hdfs.impl.disable.storage.policy</name>
+    <value>true</value>
+  </property>
 </configuration>
