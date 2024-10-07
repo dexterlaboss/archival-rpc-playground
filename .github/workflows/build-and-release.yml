@@ -19,9 +19,14 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # Enable Docker Content Trust (DCT)
-      - name: Enable Docker Content Trust
-        run: echo "DOCKER_CONTENT_TRUST=1" >> $GITHUB_ENV
+      # Set Docker Content Trust Environment Variables
+      - name: Set Docker Content Trust Environment Variables
+        env:
+          DOCKER_CONTENT_TRUST: 1
+          DOCKER_CONTENT_TRUST_ROOT_PASSPHRASE: ${{ secrets.DOCKER_CONTENT_TRUST_ROOT_PASSPHRASE }}
+          DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE: ${{ secrets.DOCKER_CONTENT_TRUST_REPOSITORY_PASSPHRASE }}
+        run: echo "Docker Content Trust enabled with provided passphrases"
+
 
       # Build and push Docker image
       - name: Build and push Docker image
